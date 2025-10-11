@@ -5,10 +5,16 @@ import wave
 import contextlib
 
 # --- 静态配置参数（主要用于文件批处理时的默认值） ---
-# 原始语音文件所在的输入文件夹
-INPUT_DIR = r"C:\Users\肖梓涵\Desktop\全组音频_未处理\新建文件夹"
+# 获取当前脚本所在目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 原始语音文件所在的输入文件夹列表
+INPUT_DIRS = [
+    os.path.join(current_dir, "dataset", "audio"),
+    os.path.join(current_dir, "dataset", "audio_noise")
+]
 # 处理后的语音文件保存的输出文件夹
-OUTPUT_DIR = r"C:\Users\肖梓涵\Desktop\全组音频"
+OUTPUT_DIR = os.path.join(current_dir, "dataset", "audio_processed")
 
 # VAD 模式：0 (非侵略性) 到 3 (最侵略性)
 VAD_MODE = 3
@@ -19,6 +25,21 @@ SILENCE_THRESHOLD_FRAMES = 10
 # 最小语音片段长度（毫秒）。小于此长度的语音片段将被忽略。
 MIN_SPEECH_SEGMENT_MS = 50 
 
+
+def convert_audio_to_wav_format(input_path, temp_path):
+    """使用pydub将音频文件转换为VAD兼容的格式"""
+    audio = AudioSegment.from_file(input_path)
+    
+    # 转换为单声道
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    # 转换为16kHz采样率（WebRTC VAD推荐）
+    if audio.frame_rate != 16000:
+        audio = audio.set_frame_rate(16000)   
+    # 转换为16-bit PCM
+    audio = audio.set_sample_width(2)
+    # 导出为WAV格式
+    audio.export(temp_path, format="wav")
 
 def read_wave(path):
     """读取 WAV 文件并返回音频数据、采样率和帧数。"""
@@ -123,18 +144,41 @@ def vad_process(pcm_data: bytes, sample_rate: int,
 
 # --- 文件处理接口（保留原有批处理能力） ---
 def vad_process_file(input_path, output_path):
-    """对单个 WAV 文件进行 VAD 处理并保存结果。"""
-    try:
-        # 1. 读取并验证 WAV 文件
-        pcm_data, sample_rate = read_wave(input_path)
-    except AssertionError as e:
-        print(f"  [跳过] 文件 {os.path.basename(input_path)} 格式不符合 VAD 要求: {e}")
-        return
-    except Exception as e:
-        print(f"  [错误] 读取文件 {os.path.basename(input_path)} 失败: {e}")
-        return
+    """对单个音频文件进行 VAD 处理并保存结果。"""
+    import tempfile
     
-    print(f"  采样率: {sample_rate} Hz, 原始时长: {len(pcm_data) / (sample_rate * 2):.2f}s")
+    temp_wav_path = None
+    try:
+        # 1. 尝试直接读取WAV文件
+        try:
+            pcm_data, sample_rate = read_wave(input_path)
+            print(f"  采样率: {sample_rate} Hz, 原始时长: {len(pcm_data) / (sample_rate * 2):.2f}s")
+        except (AssertionError, Exception) as e:
+            print(f"  [转换] 文件格式不符合VAD要求，正在转换: {e}")
+            
+            # 创建临时文件进行格式转换
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                temp_wav_path = temp_file.name
+            
+            # 转换音频格式
+            if not convert_audio_to_wav_format(input_path, temp_wav_path):
+                print(f"  [跳过] 无法转换文件 {os.path.basename(input_path)}")
+                return
+            
+            # 读取转换后的文件
+            pcm_data, sample_rate = read_wave(temp_wav_path)
+            print(f"  [转换完成] 采样率: {sample_rate} Hz, 原始时长: {len(pcm_data) / (sample_rate * 2):.2f}s")
+    
+    except Exception as e:
+        print(f"  [错误] 处理文件 {os.path.basename(input_path)} 失败: {e}")
+        return
+    finally:
+        # 清理临时文件
+        if temp_wav_path and os.path.exists(temp_wav_path):
+            try:
+                os.unlink(temp_wav_path)
+            except:
+                pass
     
     # **关键步骤：调用新的核心接口**
     processed_audio_data = vad_process(
@@ -157,36 +201,44 @@ def vad_process_file(input_path, output_path):
         print("  [警告] 未检测到有效语音片段，未生成文件。")
 
 
-# --- 主程序入口（保持不变） ---
+# --- 主程序入口 ---
 def main():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-        print(f"创建输出文件夹: {OUTPUT_DIR}")
 
-    print(f"--- 开始处理文件夹: {INPUT_DIR} ---")
-
-    # 循环遍历输入文件夹下的所有 WAV 文件
-    for filename in os.listdir(INPUT_DIR):
-        if filename.lower().endswith('.wav'):
-            input_path = os.path.join(INPUT_DIR, filename)
+    # 处理所有输入目录
+    for input_dir in INPUT_DIRS:
+        if not os.path.exists(input_dir):
+            print(f"目录不存在，跳过: {input_dir}")
+            continue
             
-            # 生成输出文件名
+        print(f"处理文件夹: {input_dir}")
+        
+        # 获取当前目录的所有音频文件
+        audio_files = []
+        for filename in os.listdir(input_dir):
+            if filename.lower().endswith(('.wav', '.mp3', '.m4a', '.flac', '.aac')):
+                audio_files.append(filename)
+        
+        if not audio_files:
+            print(f"在 {input_dir} 中未找到音频文件")
+            continue
+        
+        # 处理当前目录的所有音频文件
+        for filename in audio_files:
+            input_path = os.path.join(input_dir, filename)
+            
+            # 生成输出文件名，添加目录标识
             base_name, ext = os.path.splitext(filename)
-            output_filename = f"{base_name}_vad_processed{ext}"
+            dir_name = os.path.basename(input_dir)  # 获取目录名 (audio 或 audio_noise)
+            output_filename = f"{dir_name}_{base_name}_vad_processed.wav"
             output_path = os.path.join(OUTPUT_DIR, output_filename)
             
-            print(f"\n-> 正在处理文件: {filename}")
+            print(f"处理: {filename}")
             vad_process_file(input_path, output_path)
-
-    print("\n--- 所有文件处理完成 ---")
+    
+    print("处理完成")
 
 if __name__ == "__main__":
-    # 使用 pydub 检查 ffmpeg/libav 并修复潜在的依赖问题
-    try:
-        AudioSegment.empty()
-    except Exception:
-        print("警告: pydub 无法初始化。虽然本脚本主要使用 webrtcvad 和 wave 库，")
-        print("但如果你的 wav 文件格式不标准，可能需要安装 ffmpeg 或 libav。")
-        print("如果一切正常，请忽略此警告。")
-        
+    AudioSegment.empty()
     main()
