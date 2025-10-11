@@ -19,8 +19,13 @@ import librosa
 
 # 配置参数
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# 使用processed音频文件
-AUDIO_DIR = os.path.join(current_dir, "dataset", "audio_processed")
+# 音频文件目录
+INPUT_DIRS = {
+    'clean': os.path.join(current_dir, "dataset", "audio"),
+    'noise1': os.path.join(current_dir, "dataset", "audio_noise1"),
+    'noise2': os.path.join(current_dir, "dataset", "audio_noise2"),
+    'noise3': os.path.join(current_dir, "dataset", "audio_noise3")
+}
 OUTPUT_DIR = os.path.join(current_dir, "dataset", "features")
 
 # 特征提取参数
@@ -206,7 +211,7 @@ class FeatureExtractor:
         
         return combined_feature
 
-def process_directory(directory_path, extractor):
+def process_directory(directory_path, extractor, noise_type='clean'):
     """处理目录中的所有音频文件"""
     features_list = []
     
@@ -227,6 +232,7 @@ def process_directory(directory_path, extractor):
         try:
             # 提取特征
             features = extractor.extract_all_features(file_path)
+            features['noise_type'] = noise_type  # 添加噪声类型标记
             features_list.append(features)
             
         except Exception as e:
@@ -240,21 +246,36 @@ def main():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         print(f"创建输出目录: {OUTPUT_DIR}")
-    extractor = FeatureExtractor()
-
-    print("=== 处理processed音频 ===")
-    features = process_directory(AUDIO_DIR, extractor)
     
-    if not features:
+    extractor = FeatureExtractor()
+    
+    # 处理所有类型的音频
+    all_features = []
+    
+    for noise_type, directory_path in INPUT_DIRS.items():
+        print(f"\n=== 处理 {noise_type} 音频 ===")
+        features = process_directory(directory_path, extractor, noise_type)
+        all_features.extend(features)
+    
+    if not all_features:
         print("未找到音频文件或处理失败")
         return
-    df = pd.DataFrame(features)
+    
+    df = pd.DataFrame(all_features)
     output_file = os.path.join(OUTPUT_DIR, "audio_features.csv")
     df.to_csv(output_file, index=False, encoding='utf-8')
     print(f"\n特征已保存到: {output_file}")
+    
     print(f"\n=== 特征统计 ===")
-    print(f"总文件数: {len(features)}")
+    print(f"总文件数: {len(all_features)}")
     print(f"特征维度: {len(df.columns)}")
+    
+    # 按噪声类型统计
+    print("\n各类型文件数:")
+    for noise_type in ['clean', 'noise1', 'noise2', 'noise3']:
+        count = len(df[df['noise_type'] == noise_type])
+        print(f"  {noise_type}: {count}")
+    
     print("\n特征提取完成！")
 
 if __name__ == "__main__":
