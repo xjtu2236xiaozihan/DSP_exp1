@@ -1,0 +1,18 @@
+# DTW语音识别系统 - Python依赖包
+
+# 数值计算
+numpy>=1.21.0
+
+# 音频处理和特征提取
+librosa>=0.9.0
+soundfile>=0.11.0
+
+# DTW算法
+dtw-python>=1.3.0
+
+# 可视化
+matplotlib>=3.4.0
+
+# 可选：进度条显示
+tqdm>=4.62.0
+

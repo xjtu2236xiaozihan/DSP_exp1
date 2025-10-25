@@ -3,7 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 
-exp3/template
+exp3/templates/
 
 # C extensions
 *.so
