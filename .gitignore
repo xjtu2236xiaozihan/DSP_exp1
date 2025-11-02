@@ -4,6 +4,11 @@ __pycache__/
 *$py.class
 
 exp3/templates/
+exp3/models/
+exp3/TTS_dataset/data_clean
+exp3/TTS_dataset/data_noise
+exp3/TTS_dataset/VAD
+exp3/TTS_dataset/templates
 
 # C extensions
 *.so

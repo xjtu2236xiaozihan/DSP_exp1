@@ -44,7 +44,8 @@ def get_audio_files():
 def split_train_test(file_dict):
     """
     将文件字典拆分为训练集和测试集
-    前TRAIN_FILE_COUNT个文件用于训练，剩余的用于测试
+    序号 < TRAIN_FILE_COUNT (例如 0-7) 的文件用于训练 (模板)，
+    序号 >= TRAIN_FILE_COUNT (例如 8-9) 的文件用于测试。
     
     Args:
         file_dict: get_audio_files()返回的字典
@@ -52,28 +53,44 @@ def split_train_test(file_dict):
     Returns:
         tuple: (train_files, test_files) 两个字典
     """
-    train_files = {}
-    test_files = {}
+    # 1. 初始化空的字典
+    train_files = {digit: [] for digit in config.DIGITS}
+    test_files = {digit: [] for digit in config.DIGITS}
     
-    # 用于从文件名中提取序号的正则表达式
+    # 2. 用于从文件名中提取序号的正则表达式
+    # 匹配 num_ORDER_...
     seq_pattern = re.compile(r'_(\d+)_')
     
+    def get_sequence_number(file_path):
+        """辅助函数：从文件名提取序号"""
+        filename = os.path.basename(file_path)
+        match = seq_pattern.search(filename)
+        if match:
+            return int(match.group(1))
+        return -1 # 返回一个无效值
+
+    # 3. 遍历所有找到的文件
     for digit, file_list in file_dict.items():
-        # 根据文件名中的第二个数字（序号）排序
-        def get_sequence_number(file_path):
-            filename = os.path.basename(file_path)
-            match = seq_pattern.search(filename)
-            if match:
-                return int(match.group(1))
-            return 0
+        for file_path in file_list:
+            seq_num = get_sequence_number(file_path)
+            
+            if seq_num == -1:
+                continue # 忽略不匹配的文件
+            
+            # 4. 核心修改：
+            # 按序号判断，而不是按文件列表的索引
+            # 假设 config.TRAIN_FILE_COUNT = 8
+            # 序号 0-7 (< 8) 进入训练集
+            if seq_num < config.TRAIN_FILE_COUNT:
+                train_files[digit].append(file_path)
+            # 序号 8-9 (>= 8) 进入测试集
+            else:
+                test_files[digit].append(file_path)
         
-        sorted_files = sorted(file_list, key=get_sequence_number)
-        
-        # 前TRAIN_FILE_COUNT个用于训练
-        train_files[digit] = sorted_files[:config.TRAIN_FILE_COUNT]
-        # 剩余的用于测试（应该只有第5个）
-        test_files[digit] = sorted_files[config.TRAIN_FILE_COUNT:]
-    
+        # （可选，但推荐）对列表进行排序，确保顺序一致
+        train_files[digit].sort(key=get_sequence_number)
+        test_files[digit].sort(key=get_sequence_number)
+
     return train_files, test_files
 
 
