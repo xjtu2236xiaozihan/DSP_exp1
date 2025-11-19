@@ -19,12 +19,8 @@ LABELS = [
     'wang', 'wei', 'xiang', 'xiao', 'yu', 'zheng', 'zi'
 ]
 
-# 训练/测试划分
-TRAIN_FILE_COUNT = 8  # 前8个用于训练，剩余用于测试
-
-# 特征增强配置
-USE_DELTAS = True        # 是否拼接一阶/二阶差分
-APPLY_CMVN = True        # 是否做每条语音的CMVN归一化
+# 训练文件数量（前8个用于训练，后2个用于测试）
+TRAIN_FILE_COUNT = 8
 
 # MFCC参数配置（实验二要求）
 MFCC_PARAMS = {
