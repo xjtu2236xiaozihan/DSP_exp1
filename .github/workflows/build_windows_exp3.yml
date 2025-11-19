@@ -5,9 +5,10 @@ name: Build Windows Exe (Exp3 Only)
 on:
   # 1. 只有当 exp3 文件夹内的文件被修改并 Push 时才触发
   push:
-    branches: [ "main", "master" ]
+    branches: [ "**" ]     # <--- 允许任何分支触发
     paths:
-      - 'exp3/**'  # <--- 关键！只监听你的文件夹
+      - 'exp3/**'          # 保持只监听 exp3 文件夹变化
+      - '.github/workflows/build_windows_exp3.yml'
   
   # 2. 允许你在 GitHub 网页上手动点击按钮触发
   workflow_dispatch:
