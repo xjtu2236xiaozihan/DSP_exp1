@@ -1,16 +1,12 @@
-# 文件路径: .github/workflows/build_windows_exp3.yml
-
 name: Build Windows Exe (Exp3 Only)
 
 on:
-  # 1. 只有当 exp3 文件夹内的文件被修改并 Push 时才触发
   push:
-    branches: [ "**" ]     # <--- 允许任何分支触发
+    branches: [ "**" ]  # 允许所有分支触发
     paths:
-      - 'exp3/**'          # 保持只监听 exp3 文件夹变化
+      - 'exp3/**'       # 监听代码修改
       - '.github/workflows/build_windows_exp3.yml'
-  
-  # 2. 允许你在 GitHub 网页上手动点击按钮触发
+
   workflow_dispatch:
 
 jobs:
@@ -26,32 +22,16 @@ jobs:
         python-version: "3.10"
 
     - name: Install dependencies
-      # 既然是 Windows 环境，路径分隔符用反斜杠或正斜杠均可，GitHub Actions 都能识别
       run: |
         python -m pip install --upgrade pip
-        # 这里指定安装你 exp3 目录下的依赖
         pip install -r exp3/requirements.txt
         pip install pyinstaller
 
-    - name: Build Templates (Generate .npy files)
+    - name: Build App (Templates + EXE)
       run: |
-        # 在根目录下运行你子文件夹里的构建脚本
-        # 脚本内部会自动生成 exp3/templates
+        # 这一步现在同时完成：1.生成模板 2.生成exe
+        # 甚至不需要手动指定 pyinstaller 命令了
         python exp3/build_final_app.py
-
-    - name: Build EXE using PyInstaller
-      run: |
-        # PyInstaller 命令 (Windows 语法)
-        # 注意：所有路径都基于仓库根目录
-        # --add-data "源路径;目标路径"
-        
-        pyinstaller --noconfirm --onefile --windowed --name "DTW_Speech_System" `
-          --add-data "exp3/web_templates;exp3/web_templates" `
-          --add-data "exp3/static;exp3/static" `
-          --add-data "exp3/templates;templates" `
-          --hidden-import "sklearn.utils._typedefs" `
-          --hidden-import "sklearn.neighbors._partition_nodes" `
-          exp3/desktop_main.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
