@@ -38,13 +38,13 @@ def build_templates_ablation(train_files):
     """
     (消融版) 使用 'extract_mfcc_no_preemphasis' 在内存中构建模板
     """
-    templates = {digit: [] for digit in config.DIGITS}
+    templates = {label: [] for label in config.LABELS}
     
-    for digit in config.DIGITS:
-        for file_path in train_files[digit]:
+    for label in config.LABELS:
+        for file_path in train_files[label]:
             # 使用消融版的特征提取
             mfcc = extract_mfcc_no_preemphasis(file_path)
-            templates[digit].append(mfcc)
+            templates[label].append(mfcc)
             
     return templates
 
@@ -79,8 +79,8 @@ def main():
     correct_count = 0
     total_count = 0
     
-    for true_digit in config.DIGITS:
-        for test_file_path in test_files[true_digit]:
+    for true_label in config.LABELS:
+        for test_file_path in test_files[true_label]:
             total_count += 1
             filename = os.path.basename(test_file_path)
             
@@ -88,11 +88,11 @@ def main():
             test_mfcc = extract_mfcc_no_preemphasis(test_file_path)
             
             min_distance = float('inf')
-            predicted_digit = None
+            predicted_label = None
             
             # 与所有 (消融版) 模板计算DTW距离
-            for template_digit in config.DIGITS:
-                for template_mfcc in templates[template_digit]:
+            for template_label in config.LABELS:
+                for template_mfcc in templates[template_label]:
                     distance = dtw_core.calculate_dtw_distance(
                         template_mfcc, 
                         test_mfcc
@@ -100,16 +100,16 @@ def main():
                     
                     if distance < min_distance:
                         min_distance = distance
-                        predicted_digit = template_digit
+                        predicted_label = template_label
             
             # 统计结果
-            is_correct = (predicted_digit == true_digit)
+            is_correct = (predicted_label == true_label)
             if is_correct:
                 correct_count += 1
             
             status = "✓" if is_correct else "✗"
             print(f"{status} [{total_count:2d}] {filename:25s} | "
-                  f"真实: {true_digit} | 预测: {predicted_digit}")
+                  f"真实: {true_label} | 预测: {predicted_label}")
 
     # 4. 打印统计报告
     print("-"*60)

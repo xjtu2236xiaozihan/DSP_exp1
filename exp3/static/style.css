@@ -1,0 +1,221 @@
+/* style.css */
+
+/* --- 1. 主题与全局设置 --- */
+:root {
+    --color-bg: #0a0a1a;
+    --color-primary-accent: #00ffff; /* 赛博青色 */
+    --color-secondary-accent: #9400ff; /* 电子紫 */
+    --color-text: #e0e0e0;
+    --color-border: rgba(0, 255, 255, 0.3);
+    --color-glass-bg: rgba(0, 80, 80, 0.2);
+
+    --font-primary: 'Orbitron', sans-serif;
+    --font-secondary: 'Share Tech Mono', monospace;
+}
+
+body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+/* --- 2. HUD 容器与背景 --- */
+.grid-background {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-image: 
+        linear-gradient(var(--color-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+    background-size: 50px 50px;
+    opacity: 0.1;
+    animation: pulse-grid 10s infinite linear;
+}
+
+.hud-container {
+    width: 90%;
+    max-width: 600px;
+    padding: 2rem;
+    border: 1px solid var(--color-border);
+    background: rgba(10, 10, 26, 0.8);
+    position: relative;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.1);
+}
+
+/* HUD 角标装饰 */
+.hud-corner {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: var(--color-primary-accent);
+    border-style: solid;
+}
+.hud-corner.top-left { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+.hud-corner.top-right { top: -2px; right: -2px; border-width: 2px 2px 0 0; }
+.hud-corner.bottom-left { bottom: -2px; left: -2px; border-width: 0 0 2px 2px; }
+.hud-corner.bottom-right { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+
+/* --- 3. 头部与尾部 --- */
+header h1 {
+    font-family: var(--font-primary);
+    color: var(--color-primary-accent);
+    text-shadow: 0 0 10px var(--color-primary-accent);
+    margin: 0;
+}
+header p {
+    margin: 0 0 2rem 0;
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+footer {
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    opacity: 0.5;
+}
+
+/* --- 4. 交互核心 (Orb) --- */
+#orb {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    border: 2px solid var(--color-primary-accent);
+    background: radial-gradient(circle, rgba(0, 50, 50, 0.5) 0%, var(--color-bg) 70%);
+    box-shadow: 0 0 15px var(--color-primary-accent), inset 0 0 10px var(--color-primary-accent);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 2rem auto 1rem auto;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+    position: relative;
+}
+#orb:hover {
+    box-shadow: 0 0 30px var(--color-primary-accent), inset 0 0 20px var(--color-primary-accent);
+    transform: scale(1.05);
+}
+
+.orb-state {
+    position: absolute;
+    transition: opacity 0.3s;
+}
+.hidden {
+    display: none;
+    opacity: 0;
+}
+
+/* 状态 1: 空闲图标 */
+#icon-idle svg {
+    color: var(--color-primary-accent);
+    filter: drop-shadow(0 0 5px var(--color-primary-accent));
+}
+
+/* 状态 2: 聆听 (声波) */
+#visualizer {
+    width: 180px;
+    height: 180px;
+    opacity: 1;
+}
+#orb.recording {
+    border-color: var(--color-secondary-accent);
+    box-shadow: 0 0 30px var(--color-secondary-accent), inset 0 0 20px var(--color-secondary-accent);
+}
+
+/* 状态 3: 分析 (加载器) */
+#loader { display: flex; justify-content: center; align-items: center; }
+.loader-ring {
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    border-top-color: var(--color-primary-accent);
+    position: absolute;
+    animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+.loader-ring:nth-child(2) { animation-delay: -0.2s; border-top-color: var(--color-secondary-accent); }
+.loader-ring:nth-child(3) { animation-delay: -0.4s; border-top-color: #fff; }
+
+#status-label {
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+    animation: text-flicker 3s infinite linear;
+}
+
+/* --- 5. 结果显示 (玻璃拟态) --- */
+.result-glass-panel {
+    background: var(--color-glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 2rem;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.result-title {
+    font-family: var(--font-primary);
+    margin: 0 0 1rem 0;
+    color: var(--color-primary-accent);
+}
+
+#result-digit {
+    font-family: var(--font-primary);
+    font-size: 10rem;
+    font-weight: 700;
+    color: var(--color-primary-accent);
+    text-shadow: 0 0 25px var(--color-primary-accent);
+    margin: 1rem 0;
+    line-height: 1;
+    /* 动态打字机/故障效果 */
+    position: relative;
+    animation: glitch-in 0.5s forwards;
+}
+
+.result-details {
+    margin: 1.5rem 0;
+    font-size: 1.1rem;
+}
+.detail-value {
+    color: #fff;
+    font-weight: bold;
+}
+
+#reset-button {
+    background: transparent;
+    border: 2px solid var(--color-primary-accent);
+    color: var(--color-primary-accent);
+    font-family: var(--font-secondary);
+    font-size: 1rem;
+    padding: 0.8rem 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 0 10px var(--color-primary-accent);
+}
+#reset-button:hover {
+    background: var(--color-primary-accent);
+    color: var(--color-bg);
+    transform: scale(1.05);
+}
+
+/* --- 6. 动画 --- */
+@keyframes pulse-grid {
+    0% { opacity: 0.1; }
+    50% { opacity: 0.15; }
+    100% { opacity: 0.1; }
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+@keyframes text-flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes glitch-in {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}

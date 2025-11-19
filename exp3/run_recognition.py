@@ -26,8 +26,8 @@ def main():
     
     template_count = sum(len(mfcc_list) for mfcc_list in templates.values())
     print(f"成功加载 {template_count} 个模板")
-    for digit in config.DIGITS:
-        print(f"  数字 {digit}: {len(templates[digit])} 个模板")
+    for label in config.LABELS:
+        print(f"  标签 {label}: {len(templates[label])} 个模板")
     
     if template_count == 0:
         print("\n错误: 未找到模板文件！")
@@ -50,16 +50,16 @@ def main():
     total_count = 0
     
     # 用于保存混淆矩阵数据
-    confusion_matrix = {true_digit: {pred_digit: 0 for pred_digit in config.DIGITS} 
-                       for true_digit in config.DIGITS}
+    confusion_matrix = {true_label: {pred_label: 0 for pred_label in config.LABELS} 
+                        for true_label in config.LABELS}
     
     # 创建可视化结果目录
     vis_dir = "results/visualizations"
     os.makedirs(vis_dir, exist_ok=True)
     
     # 遍历每个数字的测试文件
-    for true_digit in config.DIGITS:
-        for test_file_path in test_files[true_digit]:
+    for true_label in config.LABELS:
+        for test_file_path in test_files[true_label]:
             total_count += 1
             filename = os.path.basename(test_file_path)
             
@@ -68,44 +68,44 @@ def main():
             
             # 初始化最小距离和预测结果
             min_distance = float('inf')
-            predicted_digit = None
+            predicted_label = None
             best_template_idx = None
             
             # 与所有模板计算DTW距离
-            for template_digit in config.DIGITS:
-                for idx, template_mfcc in enumerate(templates[template_digit]):
+            for template_label in config.LABELS:
+                for idx, template_mfcc in enumerate(templates[template_label]):
                     # 计算DTW距离
                     distance = dtw_core.calculate_dtw_distance(template_mfcc, test_mfcc)
                     
                     # 更新最小距离
                     if distance < min_distance:
                         min_distance = distance
-                        predicted_digit = template_digit
+                        predicted_label = template_label
                         best_template_idx = idx
             
             # 统计结果
-            is_correct = (predicted_digit == true_digit)
+            is_correct = (predicted_label == true_label)
             if is_correct:
                 correct_count += 1
             
             # 更新混淆矩阵
-            confusion_matrix[true_digit][predicted_digit] += 1
+            confusion_matrix[true_label][predicted_label] += 1
             
             # 打印识别结果
             status = "✓" if is_correct else "✗"
             print(f"{status} [{total_count:2d}] 文件: {filename:25s} | "
-                  f"真实: {true_digit} | 预测: {predicted_digit} | "
+                  f"真实: {true_label} | 预测: {predicted_label} | "
                   f"距离: {min_distance:.2f}")
             
             # 可选：为第一个测试样本生成可视化（可根据需要调整）
             if total_count <= 3:  # 只为前3个样本生成可视化
-                best_template = templates[predicted_digit][best_template_idx]
+                best_template = templates[predicted_label][best_template_idx]
                 vis_path = os.path.join(vis_dir, f"alignment_{filename.replace('.wav', '.png')}")
                 visualization.plot_dtw_alignment(
                     best_template, 
                     test_mfcc, 
                     save_path=vis_path,
-                    title=f"DTW对齐: {filename} (真实:{true_digit}, 预测:{predicted_digit})"
+                    title=f"DTW对齐: {filename} (真实:{true_label}, 预测:{predicted_label})"
                 )
     
     # 4. 打印统计报告
@@ -123,25 +123,27 @@ def main():
     print(f"  识别准确率: {accuracy:.2f}%")
     
     # 打印各数字的识别准确率
-    print(f"\n各数字识别准确率:")
-    for digit in config.DIGITS:
-        digit_total = len(test_files[digit])
-        digit_correct = confusion_matrix[digit][digit]
-        digit_accuracy = (digit_correct / digit_total * 100) if digit_total > 0 else 0
-        print(f"  数字 {digit}: {digit_correct}/{digit_total} ({digit_accuracy:.2f}%)")
+    print(f"\n各标签识别准确率:")
+    for label in config.LABELS:
+        label_total = len(test_files[label])
+        label_correct = confusion_matrix[label][label]
+        label_accuracy = (label_correct / label_total * 100) if label_total > 0 else 0
+        print(f"  标签 {label}: {label_correct}/{label_total} ({label_accuracy:.2f}%)")
     
     # 打印混淆矩阵
     print(f"\n混淆矩阵 (行:真实, 列:预测):")
-    print("     ", end="")
-    for digit in config.DIGITS:
-        print(f"{digit:4s}", end="")
+    col_width = max(4, max(len(label) for label in config.LABELS))
+    row_width = col_width
+    print(" " * (row_width + 3), end="")
+    for label in config.LABELS:
+        print(f"{label:>{col_width}s}", end="")
     print()
     
-    for true_digit in config.DIGITS:
-        print(f"  {true_digit} |", end="")
-        for pred_digit in config.DIGITS:
-            count = confusion_matrix[true_digit][pred_digit]
-            print(f"{count:4d}", end="")
+    for true_label in config.LABELS:
+        print(f"{true_label:>{row_width}s} |", end="")
+        for pred_label in config.LABELS:
+            count = confusion_matrix[true_label][pred_label]
+            print(f"{count:>{col_width}d}", end="")
         print()
     
     print("\n" + "="*60)

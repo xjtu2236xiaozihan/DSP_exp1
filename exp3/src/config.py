@@ -5,15 +5,26 @@
 
 import os
 
-# 路径配置
-VAD_DIR = "./TTS_dataset/VAD/"  # VAD处理后的音频文件目录
-TEMPLATE_DIR = "TTS_dataset/templates/"  # 模板存储目录
+# 基础路径（以本项目 exp3 目录为根）
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-# 数字列表（只识别0-9）
-DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+# 数据与模板目录
+DATASET_DIR = os.path.join(PROJECT_ROOT, "dataset")          # 统一后的音频数据目录
+TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "templates")        # 模板存储目录
 
-# 训练文件数量（前8个用于训练，后2个用于测试）
-TRAIN_FILE_COUNT = 8
+# 标签列表（数字 0-9 + 姓氏拼音）
+LABELS = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'cheng', 'dai', 'fang', 'gu', 'han', 'hao', 'qi',
+    'wang', 'wei', 'xiang', 'xiao', 'yu', 'zheng', 'zi'
+]
+
+# 训练/测试划分
+TRAIN_FILE_COUNT = 8  # 前8个用于训练，剩余用于测试
+
+# 特征增强配置
+USE_DELTAS = True        # 是否拼接一阶/二阶差分
+APPLY_CMVN = True        # 是否做每条语音的CMVN归一化
 
 # MFCC参数配置（实验二要求）
 MFCC_PARAMS = {
