@@ -38,8 +38,8 @@ def extract_mfcc(file_path):
     if len(y) < 1024:
         y, sr = librosa.load(file_path, sr=None)
 
-    # 2. 应用预加重
-    y = librosa.effects.preemphasis(y, coef=config.MFCC_PARAMS['preemph_coef'])
+    # 2. 不应用预加重 消融实验揭示不使用准确率更高
+    # y = librosa.effects.preemphasis(y, coef=config.MFCC_PARAMS['preemph_coef'])
     
     # 3. 提取MFCC特征
     mfcc = librosa.feature.mfcc(
