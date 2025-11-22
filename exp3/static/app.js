@@ -1,13 +1,13 @@
-// app.js
+// exp3/static/app.js - 修复版 (原生 WAV 录制)
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 1. 获取 DOM 元素 ---
+    // --- 1. DOM 元素 ---
     const orb = document.getElementById('orb');
     const statusLabel = document.getElementById('status-label');
     const interactionCore = document.getElementById('interaction-core');
     const resultDisplay = document.getElementById('result-display');
     
-    // Orb 内部状态
+    // Orb 内部
     const iconIdle = document.getElementById('icon-idle');
     const visualizerCanvas = document.getElementById('visualizer');
     const loader = document.getElementById('loader');
@@ -17,15 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dtwDistance = document.getElementById('dtw-distance');
     const resetButton = document.getElementById('reset-button');
 
-    // --- 2. Web Audio API & 录音设置 ---
-    let mediaRecorder;
-    let audioChunks = [];
-    let audioContext;
-    let visualizerContext = visualizerCanvas.getContext('2d');
-    let analyser;
-    let animationFrameId;
-
-    // --- 3. 状态管理 ---
+    // --- 2. 状态定义 ---
     const states = {
         IDLE: 'IDLE',
         RECORDING: 'RECORDING',
@@ -34,10 +26,24 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let currentState = states.IDLE;
 
+    // --- 3. 音频处理变量 ---
+    let audioContext = null;
+    let mediaStream = null;
+    let scriptProcessor = null;
+    let audioInput = null;
+    let audioBuffers = []; // 存储 PCM 数据
+    let bufferLength = 0;
+    
+    // 可视化
+    let visualizerContext = visualizerCanvas.getContext('2d');
+    let analyser = null;
+    let animationFrameId = null;
+
+    // --- 4. 状态切换逻辑 ---
     function setState(newState) {
         currentState = newState;
         
-        // 隐藏所有 Orb 状态
+        // UI 重置
         [iconIdle, visualizerCanvas, loader].forEach(el => el.classList.add('hidden'));
         orb.classList.remove('recording');
 
@@ -53,13 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusLabel.textContent = '正在聆听... (点击停止)';
                 visualizerCanvas.classList.remove('hidden');
                 orb.classList.add('recording');
-                startAudioCapture();
+                startWavRecording(); // <--- 使用新的录音函数
                 break;
 
             case states.PROCESSING:
-                statusLabel.textContent = '分析中...DTW 匹配中...';
+                statusLabel.textContent = '分析中...';
                 loader.classList.remove('hidden');
-                stopAudioCapture();
+                stopWavRecording(); // <--- 使用新的停止函数
                 break;
 
             case states.RESULT:
@@ -69,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- 4. 核心交互事件 ---
+    // --- 5. 交互事件 ---
     orb.addEventListener('click', () => {
         if (currentState === states.IDLE) {
             setState(states.RECORDING);
@@ -84,107 +90,146 @@ document.addEventListener('DOMContentLoaded', () => {
         dtwDistance.textContent = '---';
     });
 
-    // --- 5. 音频捕获与可视化 ---
-    async function startAudioCapture() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('您的浏览器不支持麦克风访问！');
-            setState(states.IDLE);
-            return;
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = []; // 清空之前的录音
-
-            // 可视化
-            setupVisualizer(stream);
-            
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
-
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                sendAudioToBackend(audioBlob);
-                stream.getTracks().forEach(track => track.stop()); // 关闭麦克风
-                cancelAnimationFrame(animationFrameId); // 停止动画
-            };
-
-            mediaRecorder.start();
-        } catch (err) {
-            console.error("麦克风访问失败:", err);
-            alert("无法访问麦克风。");
-            setState(states.IDLE);
-        }
-    }
-
-    function stopAudioCapture() {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    }
+    // ==========================================
+    // [核心修复] 原生 WAV 录音实现 (替代 MediaRecorder)
+    // ==========================================
     
-    // --- 6. 声波可视化 (Canvas) ---
-    function setupVisualizer(stream) {
-        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-
-        analyser.fftSize = 256;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        
-        visualizerContext.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
-        
-        const draw = () => {
-            animationFrameId = requestAnimationFrame(draw);
-            analyser.getByteTimeDomainData(dataArray); // 获取波形数据
-
-            visualizerContext.fillStyle = 'rgba(10, 10, 26, 0.1)'; // 清除画布（带拖影效果）
-            visualizerContext.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+    async function startWavRecording() {
+        try {
+            // 初始化 AudioContext
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 }); // 强制 16kHz
             
-            visualizerContext.lineWidth = 2;
-            visualizerContext.strokeStyle = 'var(--color-secondary-accent)'; // 紫色波形
-            visualizerContext.beginPath();
+            // 获取麦克风流
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            // 创建源
+            audioInput = audioContext.createMediaStreamSource(mediaStream);
+            
+            // 创建处理节点 (Buffer Size 4096, 1 Input, 1 Output)
+            //虽然 ScriptProcessor 已废弃，但它是目前无需外部文件(AudioWorklet)最简单的实现方式
+            scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            
+            // 重置缓冲区
+            audioBuffers = [];
+            bufferLength = 0;
 
-            const sliceWidth = visualizerCanvas.width * 1.0 / bufferLength;
-            let x = 0;
+            // 监听音频数据
+            scriptProcessor.onaudioprocess = (event) => {
+                const inputBuffer = event.inputBuffer.getChannelData(0); // 获取单声道数据
+                // 深拷贝一份数据存起来
+                const bufferCopy = new Float32Array(inputBuffer);
+                audioBuffers.push(bufferCopy);
+                bufferLength += bufferCopy.length;
+            };
 
-            for(let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0; // 归一化到 0-2
-                const y = v * visualizerCanvas.height / 2;
+            // 连接节点: Source -> Processor -> Destination
+            audioInput.connect(scriptProcessor);
+            scriptProcessor.connect(audioContext.destination);
 
-                if(i === 0) visualizerContext.moveTo(x, y);
-                else visualizerContext.lineTo(x, y);
-                x += sliceWidth;
-            }
-            visualizerContext.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
-            visualizerContext.stroke();
-        };
-        draw();
+            // 启动可视化
+            setupVisualizer(mediaStream);
+
+        } catch (err) {
+            console.error("录音启动失败:", err);
+            alert("无法访问麦克风: " + err.message);
+            setState(states.IDLE);
+        }
     }
 
-    // --- 7. 后端通信 ---
+    function stopWavRecording() {
+        if (scriptProcessor && audioInput) {
+            // 断开连接
+            audioInput.disconnect();
+            scriptProcessor.disconnect();
+            
+            // 停止流
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+
+            // 合并 buffer 并生成 WAV Blob
+            const wavBlob = exportWAV(audioBuffers, bufferLength, audioContext.sampleRate);
+            
+            // 发送给后端
+            sendAudioToBackend(wavBlob);
+        }
+        
+        // 停止动画
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    }
+
+    // --- WAV 编码核心函数 (将 Float32 转换为 16-bit PCM WAV) ---
+    function exportWAV(buffers, totalLength, sampleRate) {
+        // 1. 合并所有 Buffer
+        const mergedBuffer = new Float32Array(totalLength);
+        let offset = 0;
+        for (let i = 0; i < buffers.length; i++) {
+            mergedBuffer.set(buffers[i], offset);
+            offset += buffers[i].length;
+        }
+
+        // 2. 创建 WAV 文件头 (44 bytes)
+        const buffer = new ArrayBuffer(44 + mergedBuffer.length * 2);
+        const view = new DataView(buffer);
+
+        // RIFF chunk descriptor
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + mergedBuffer.length * 2, true);
+        writeString(view, 8, 'WAVE');
+        
+        // fmt sub-chunk
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);   // Subchunk1Size (16 for PCM)
+        view.setUint16(20, 1, true);    // AudioFormat (1 for PCM)
+        view.setUint16(22, 1, true);    // NumChannels (1 for Mono)
+        view.setUint32(24, sampleRate, true); // SampleRate
+        view.setUint32(28, sampleRate * 2, true); // ByteRate
+        view.setUint16(32, 2, true);    // BlockAlign
+        view.setUint16(34, 16, true);   // BitsPerSample
+
+        // data sub-chunk
+        writeString(view, 36, 'data');
+        view.setUint32(40, mergedBuffer.length * 2, true);
+
+        // 3. 写入 PCM 数据 (Float32 -> Int16)
+        floatTo16BitPCM(view, 44, mergedBuffer);
+
+        return new Blob([view], { type: 'audio/wav' });
+    }
+
+    function floatTo16BitPCM(output, offset, input) {
+        for (let i = 0; i < input.length; i++, offset += 2) {
+            let s = Math.max(-1, Math.min(1, input[i])); // Clamp
+            // Convert to 16-bit PCM
+            s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            output.setInt16(offset, s, true);
+        }
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    // --- 6. 后端通信 (保持不变) ---
     async function sendAudioToBackend(audioBlob) {
         const formData = new FormData();
-        formData.append('audio_file', audioBlob, 'user_digit.wav');
+        formData.append('audio_file', audioBlob, 'mic_record.wav'); // 现在是真正的 wav
 
         try {
-            // !! 假设你有一个运行在 5000 端口的后端服务 !!
             const response = await fetch('/recognize', {
                 method: 'POST',
                 body: formData
             });
 
             if (!response.ok) {
-                throw new Error(`服务器错误: ${response.statusText}`);
+                // 尝试解析错误信息
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP ${response.status}`);
             }
 
             const data = await response.json();
-
-            // 更新结果
             resultDigit.textContent = data.digit;
             dtwDistance.textContent = data.distance.toFixed(2);
             setState(states.RESULT);
@@ -196,6 +241,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 初始化
-    setState(states.IDLE);
+    // --- 7. 可视化 (复用原有逻辑，微调) ---
+    function setupVisualizer(stream) {
+        if (!audioContext) return;
+        analyser = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        analyser.fftSize = 256;
+        const bufferLen = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLen);
+        
+        const draw = () => {
+            animationFrameId = requestAnimationFrame(draw);
+            analyser.getByteTimeDomainData(dataArray);
+
+            visualizerContext.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+            visualizerContext.fillStyle = 'rgba(10, 10, 26, 0.1)'; 
+            visualizerContext.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+            
+            visualizerContext.lineWidth = 2;
+            visualizerContext.strokeStyle = '#00f3ff'; // 青色波形
+            visualizerContext.beginPath();
+
+            const sliceWidth = visualizerCanvas.width * 1.0 / bufferLen;
+            let x = 0;
+
+            for(let i = 0; i < bufferLen; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * visualizerCanvas.height / 2;
+                if(i === 0) visualizerContext.moveTo(x, y);
+                else visualizerContext.lineTo(x, y);
+                x += sliceWidth;
+            }
+            visualizerContext.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
+            visualizerContext.stroke();
+        };
+        draw();
+    }
 });

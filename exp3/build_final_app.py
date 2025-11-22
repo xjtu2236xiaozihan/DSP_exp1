@@ -92,19 +92,23 @@ def main():
         '--noconfirm',
         '--clean',
         
-        # [Robustness Fix] 显式添加 Flask 及其依赖
+        # [Robustness Fix] Flask 依赖
         '--hidden-import=flask',
         '--hidden-import=werkzeug',
         '--hidden-import=jinja2',
-        '--hidden-import=click',
-        '--hidden-import=itsdangerous',
-        '--hidden-import=markupsafe',
-        '--hidden-import=engineio',   # 防止未来可能用到的 socketio 报错
         
-        # 显式添加 sklearn 依赖
-        '--hidden-import=sklearn.utils._typedefs',
-        '--hidden-import=sklearn.neighbors._partition_nodes',
-        '--hidden-import=scipy.special.cython_special', # scipy 常见缺失
+        # [New] Librosa/Scipy/Sklearn 深度依赖补全
+        '--hidden-import=sklearn.tree',
+        '--hidden-import=sklearn.neighbors.typedefs',
+        '--hidden-import=sklearn.neighbors.quad_tree',
+        '--hidden-import=sklearn.tree._utils',
+        '--hidden-import=scipy.signal',             
+        '--hidden-import=scipy.signal.bsplines',    
+        '--hidden-import=scipy.special',
+        '--hidden-import=scipy.special.cython_special',
+        '--hidden-import=scipy.spatial.transform._rotation_groups',
+        '--hidden-import=scipy.integrate.lsoda',  # 常见缺失
+        '--hidden-import=librosa',
         
         # 数据映射
         f'--add-data={src_web_tpl}{sep}exp3/web_templates',

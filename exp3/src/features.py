@@ -1,61 +1,80 @@
 """
-特征提取模块
-提取MFCC特征（实验二内容）
+特征提取模块 (高精度版)
 """
-
 import os
+import tempfile
+import numpy as np
+import librosa
+from scipy.signal import butter, lfilter
+from typing import Tuple, Any
+
 from . import config
 
-# 处理 numba cache 在 macOS / Python 3.13 上的限制
-NUMBA_CACHE_DIR = os.path.join(config.PROJECT_ROOT, ".numba_cache")
+# Numba Cache Fix
+NUMBA_CACHE_DIR = os.path.join(tempfile.gettempdir(), "dtw_numba_cache")
 os.makedirs(NUMBA_CACHE_DIR, exist_ok=True)
-os.environ.setdefault("NUMBA_CACHE_DIR", NUMBA_CACHE_DIR)
-os.environ.setdefault("NUMBA_DISABLE_CACHING", "1")
+os.environ["NUMBA_CACHE_DIR"] = NUMBA_CACHE_DIR
+os.environ["NUMBA_DISABLE_CACHING"] = "0"
 
-import librosa
-import numpy as np
+# --- 信号处理函数 ---
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    # [Fix] 忽略 Pylance 的静态检查误报
+    b, a = butter(order, [low, high], btype='band') # type: ignore
+    return b, a
 
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
 
 def extract_mfcc(file_path):
-    """
-    从音频文件中提取MFCC特征 (包含静音消除和标准化)
-    
-    Args:
-        file_path: 音频文件路径
-    
-    Returns:
-        numpy.ndarray: MFCC特征数组，形状为 (n_mfcc, n_frames)
-    """
-    # 1. 加载音频文件（保持原始采样率）
-    y, sr = librosa.load(file_path, sr=None)
-    
-    # --- 优化点1：静音消除 ---
-    # 去除首尾低于 30dB 的静音部分
-    # 这能防止大量静音帧干扰 DTW 匹配
-    y, _ = librosa.effects.trim(y, top_db=30)
-    
-    # 安全检查：如果剪切后音频太短（比如全是噪音被剪没了），这就重新加载原音频或保留部分
-    if len(y) < 1024:
-        y, sr = librosa.load(file_path, sr=None)
+    try:
+        y, sr = librosa.load(file_path, sr=config.SAMPLE_RATE)
+    except Exception as e:
+        raise RuntimeError(f"加载失败: {e}")
 
-    # 2. 不应用预加重 消融实验揭示不使用准确率更高
-    # y = librosa.effects.preemphasis(y, coef=config.MFCC_PARAMS['preemph_coef'])
+    # --- [Fix 1] 噪音门阈值微调 ---
+    # 如果环境很安静，0.005 可能太高了，导致说话声被当成噪音。
+    # 调低到 0.001 (更灵敏)
+    rms = np.sqrt(np.mean(y**2))
+    if rms < 0.001: 
+        raise ValueError("声音太小，请靠近麦克风")
+
+    # --- [Fix 2] 放宽带通滤波 (80Hz - 7500Hz) ---
+    # 之前 300Hz 把男声低频切没了，改为 80Hz
+    try:
+        y = butter_bandpass_filter(y, 80, 7500, sr, order=4)
+    except:
+        pass 
+
+    # --- [Fix 3] 静音消除 ---
+    # top_db=30 是最安全的通用值，既能去噪又不会切掉字尾
+    y, _ = librosa.effects.trim(y, top_db=30) # type: ignore
     
-    # 3. 提取MFCC特征
-    mfcc = librosa.feature.mfcc(
-        y=y,
-        sr=sr,
-        n_mfcc=config.MFCC_PARAMS['n_mfcc'],
-        n_fft=config.MFCC_PARAMS['n_fft'],
-        hop_length=config.MFCC_PARAMS['hop_length']
-    )
+    if len(y) < 512: # 稍微放宽最小长度限制
+        # 如果切完了没了，尝试只切两头极其安静的部分
+        y, sr = librosa.load(file_path, sr=config.SAMPLE_RATE)
+        y, _ = librosa.effects.trim(y, top_db=15)
+
+    try:
+        # 使用 config 中的新参数 (win_length)
+        mfcc = librosa.feature.mfcc(
+            y=y,
+            sr=sr,
+            n_mfcc=config.MFCC_PARAMS['n_mfcc'],
+            n_fft=config.MFCC_PARAMS['n_fft'],
+            win_length=config.MFCC_PARAMS.get('win_length', 400), # 兼容性写法
+            hop_length=config.MFCC_PARAMS['hop_length']
+        )
+    except Exception as e:
+         raise RuntimeError(f"MFCC错误: {e}")
     
-    # --- 优化点2：特征标准化 (CMVN) ---
-    # Cepstral Mean and Variance Normalization
-    # 减去均值，除以标准差。消除信道噪声和音量差异的影响。
-    # axis=1 表示沿时间轴计算均值和方差
+    # CMVN
     mfcc_mean = np.mean(mfcc, axis=1, keepdims=True)
     mfcc_std = np.std(mfcc, axis=1, keepdims=True)
-    mfcc = (mfcc - mfcc_mean) / (mfcc_std + 1e-8) # 加极小值防止除零
+    mfcc = (mfcc - mfcc_mean) / (mfcc_std + 1e-8)
     
     return mfcc

@@ -1,44 +1,52 @@
-# 文件路径: exp3/server.py
-
 import os
+import sys
+import shutil
 import numpy as np
 from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 import tempfile
 import logging
+import traceback
+
 from src import data_utils
 from src import features
 from src import dtw_core
 from src import config
 
-app = Flask(__name__, 
-            template_folder='web_templates', 
-            static_folder='static')
+app = Flask(__name__, template_folder='web_templates', static_folder='static')
 
-app.config['UPLOAD_FOLDER'] = 'temp_uploads'
+# 系统临时目录
+app.config['UPLOAD_FOLDER'] = os.path.join(tempfile.gettempdir(), 'dtw_app_uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-logging.basicConfig(level=logging.INFO)
 
-# --- 修改点：将模板加载改为全局变量 + 加载函数 ---
+# 桌面调试路径
+def get_desktop_path():
+    return os.path.join(os.path.expanduser("~"), "Desktop")
+
+log_path = os.path.join(get_desktop_path(), "dtw_debug_log.txt")
+debug_wav_path = os.path.join(get_desktop_path(), "debug_last_input.wav")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(), logging.FileHandler(log_path, encoding='utf-8')]
+)
+logger = logging.getLogger(__name__)
+
+# 全局变量初始化为 None
 templates = None
 
 def load_resources():
-    """
-    在主程序配置好路径后，显式调用此函数加载模板
-    """
     global templates
     try:
-        app.logger.info(f"正在从 {config.TEMPLATE_DIR} 加载 DTW 模板库...")
+        logger.info(f"加载模板库... (参数: sr={config.SAMPLE_RATE}, n_fft={config.MFCC_PARAMS['n_fft']})")
         templates = data_utils.load_templates()
-        
-        template_count = sum(len(v) for v in templates.values())
-        if template_count == 0:
-            app.logger.error("错误: 模板库为空！")
-        else:
-            app.logger.info(f"模板库加载完毕，共 {template_count} 个模板。")
+        count = sum(len(v) for v in templates.values())
+        logger.info(f"模板库加载完毕: {count} 个")
     except Exception as e:
-        app.logger.error(f"模板加载失败: {e}")
-        templates = {}
+        logger.error(f"模板加载失败: {e}")
+        logger.error(traceback.format_exc())
+        templates = {} # 失败时兜底为空字典
 
 @app.route('/')
 def index():
@@ -46,46 +54,72 @@ def index():
 
 @app.route('/recognize', methods=['POST'])
 def recognize_speech():
-    # 确保模板已加载
     global templates
-    if templates is None or len(templates) == 0:
+    # 1. 懒加载检查
+    if templates is None:
         load_resources()
-        if templates is None or len(templates) == 0:
-            return jsonify({'error': '服务器模板库加载失败，请检查日志'}), 500
+    
+    # 2. [FIX] 关键修复：创建安全的局部引用
+    # 如果 templates 依然是 None（极端情况），则使用空字典 {}
+    # 这能消除 "Operator 'in' not supported for 'None'" 错误
+    active_templates = templates if templates is not None else {}
 
     if 'audio_file' not in request.files:
-        return jsonify({'error': '未找到音频文件'}), 400
+        return jsonify({'error': '无音频文件'}), 400
     
     file = request.files['audio_file']
-    temp_dir = tempfile.gettempdir()
-    filename = secure_filename(file.filename or 'temp_audio.wav')
-    temp_audio_path = os.path.join(temp_dir, filename)
-    file.save(temp_audio_path)
-
+    filename = secure_filename(file.filename or 'temp.wav')
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
     try:
-        test_mfcc = features.extract_mfcc(temp_audio_path)
+        # 保存并备份录音
+        file.save(save_path)
+        try:
+            shutil.copy(save_path, debug_wav_path)
+        except:
+            pass
+
+        # 提取特征
+        test_mfcc = features.extract_mfcc(save_path)
+        
+        # DTW 匹配
         min_distance = float('inf')
         predicted_label = None
-        
+        top_candidates = []
+
         for template_label in config.LABELS:
-            if template_label in templates:
-                for template_mfcc in templates[template_label]:
-                    distance = dtw_core.calculate_dtw_distance(template_mfcc, test_mfcc)
-                    if distance < min_distance:
-                        min_distance = distance
+            # [FIX] 这里使用安全的 active_templates
+            if template_label in active_templates:
+                for idx, template_mfcc in enumerate(active_templates[template_label]):
+                    dist = dtw_core.calculate_dtw_distance(template_mfcc, test_mfcc)
+                    
+                    if dist < min_distance:
+                        min_distance = dist
                         predicted_label = template_label
+                    
+                    # 记录前3名
+                    if len(top_candidates) < 3 or dist < top_candidates[-1][0]:
+                        top_candidates.append((dist, template_label))
+                        top_candidates.sort(key=lambda x: x[0])
+                        top_candidates = top_candidates[:3]
         
-        app.logger.info(f"识别结果: {predicted_label}, 距离: {min_distance}")
+        logger.info(f"识别结果: {predicted_label} (距离: {min_distance:.4f})")
+        
         return jsonify({'digit': predicted_label, 'distance': float(min_distance)})
 
+    except ValueError as ve:
+        # [New] 专门处理音量过低/无效音频的错误
+        logger.warning(f"无效输入拦截: {ve}")
+        return jsonify({'error': str(ve)}), 400 # 返回 400 Bad Request
+    
     except Exception as e:
-        app.logger.error(f"识别出错: {e}", exc_info=True)
+        logger.error(f"识别崩溃: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
     finally:
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
+        if os.path.exists(save_path):
+            try: os.remove(save_path)
+            except: pass
 
 if __name__ == '__main__':
-    # 开发模式下自动加载
     load_resources()
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=54321)
