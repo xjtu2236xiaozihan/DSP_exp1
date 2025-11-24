@@ -1,25 +1,29 @@
 """
-配置文件
-存放所有全局配置和参数
+配置文件 (ASR标准参数版)
 """
-
 import os
 
-# 路径配置
-VAD_DIR = "./TTS_dataset/VAD/"  # VAD处理后的音频文件目录
-TEMPLATE_DIR = "TTS_dataset/templates/"  # 模板存储目录
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATASET_DIR = os.path.join(PROJECT_ROOT, "dataset")
+TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "templates")
 
-# 数字列表（只识别0-9）
-DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+LABELS = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'cheng', 'dai', 'fang', 'gu', 'han', 'hao', 'qi',
+    'wang', 'wei', 'xiang', 'xiao', 'yu', 'zheng', 'zi'
+]
 
-# 训练文件数量（前8个用于训练，后2个用于测试）
 TRAIN_FILE_COUNT = 8
 
-# MFCC参数配置（实验二要求）
-MFCC_PARAMS = {
-    'n_mfcc': 13,          # 倒谱系数数量
-    'n_fft': 2048,         # FFT窗口大小
-    'hop_length': 512,     # 帧移
-    'preemph_coef': 0.97   # 预加重系数
-}
+# 1. 采样率保持 16k
+SAMPLE_RATE = 16000 
 
+# 2. [FIX] 采用语音识别黄金标准参数 (25ms窗口, 10ms帧移)
+# 这会生成比之前多 2 倍的特征帧，大幅提升短词识别率
+MFCC_PARAMS = {
+    'n_mfcc': 13,
+    'n_fft': 512,          # FFT 计算点数 (保持 2^9)
+    'win_length': 400,     # [新增] 窗口长度 25ms (16000 * 0.025)
+    'hop_length': 160,     # [修改] 帧移 10ms (16000 * 0.010)
+    'preemph_coef': 0.97
+}

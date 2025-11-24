@@ -43,9 +43,9 @@ def run_recognition_test(templates, test_files, dist_method):
     correct_count = 0
     total_count = 0
     
-    # 遍历每个数字的测试文件
-    for true_digit in config.DIGITS:
-        for test_file_path in test_files[true_digit]:
+    # 遍历每个标签的测试文件
+    for true_label in config.LABELS:
+        for test_file_path in test_files[true_label]:
             total_count += 1
             filename = os.path.basename(test_file_path)
             
@@ -53,11 +53,11 @@ def run_recognition_test(templates, test_files, dist_method):
             test_mfcc = features.extract_mfcc(test_file_path)
             
             min_distance = float('inf')
-            predicted_digit = None
+            predicted_label = None
             
             # 与所有模板计算DTW距离
-            for template_digit in config.DIGITS:
-                for template_mfcc in templates[template_digit]:
+            for template_label in config.LABELS:
+                for template_mfcc in templates[template_label]:
                     distance = calculate_dtw_distance(
                         template_mfcc, 
                         test_mfcc, 
@@ -66,16 +66,16 @@ def run_recognition_test(templates, test_files, dist_method):
                     
                     if distance < min_distance:
                         min_distance = distance
-                        predicted_digit = template_digit
+                        predicted_label = template_label
             
             # 统计结果
-            if predicted_digit == true_digit:
+            if predicted_label == true_label:
                 correct_count += 1
             
             # 打印简略结果
-            status = "✓" if (predicted_digit == true_digit) else "✗"
+            status = "✓" if (predicted_label == true_label) else "✗"
             print(f"{status} [{total_count:2d}] {filename:25s} | "
-                  f"真实: {true_digit} | 预测: {predicted_digit}")
+                  f"真实: {true_label} | 预测: {predicted_label}")
 
     # 4. 打印统计报告
     print("-"*60)

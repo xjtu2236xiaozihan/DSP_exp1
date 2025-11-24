@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目 exp3: 声波识别核心</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="grid-background"></div>
+
+    <div class="hud-container">
+        <div class="hud-corner top-left"></div>
+        <div class="hud-corner top-right"></div>
+        <div class="hud-corner bottom-left"></div>
+        <div class="hud-corner bottom-right"></div>
+
+        <header>
+            <h1>项目 exp3: 声波识别核心</h1>
+            <p>Project EXP3: DTW Sonic Recognition Core</p>
+        </header>
+
+        <main>
+            <div id="interaction-core">
+                <div id="orb">
+                    <div id="icon-idle" class="orb-state">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                    </div>
+                    <canvas id="visualizer" class="orb-state hidden" width="180px" height="180px"></canvas>
+                    <div id="loader" class="orb-state hidden">
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                    </div>
+                </div>
+                <div id="status-label">点击以激活</div>
+            </div>
+
+            <div id="result-display" class="hidden">
+                <div class="result-glass-panel">
+                    <h2 class="result-title">识别结果</h2>
+                    <div id="result-digit" data-text="_">_</div>
+                    <div class="result-details">
+                        <span class_name="detail-label">DTW 最小匹配距离:</span>
+                        <span id="dtw-distance" class="detail-value">---</span>
+                    </div>
+                    <button id="reset-button">再次识别</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>基于动态时间规整 (Dynamic Time Warping) 算法</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
